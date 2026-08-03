@@ -14,7 +14,9 @@ EvalScope 是 ModelScope 开源的大语言模型评测与压测框架，内置�
 ### 部署步骤
 
 1. 单击部署链接，进入服务实例部署界面：[部署链接](https://computenest.console.aliyun.com/service/instance/create?type=user&ServiceId=service-13c1c7d4aab245b5aa46)
-2. 按界面提示填写参数。**如需私网压测，务必在「可用区配置」中选择模型服务所在的已有 VPC 与交换机。**
+2. 按界面提示填写参数，其中两项需重点确认：
+   - **开启公网IP**（默认开启）：开启后可从 ModelScope 下载数据集/分词器、上报 SwanLab、压测公网模型 API，并可公网 SSH 登录。建议同时把「允许 SSH 登录的源网段」改为您的办公网出口 IP。
+   - **可用区配置**：如需私网压测，务必选择模型服务所在的已有 VPC 与交换机。
 3. 单击「下一步：确认订单」，确认预估费用与参数后单击「立即创建」。
 4. 等待部署完成（约 3-5 分钟），实例状态变为「已部署」。
 
@@ -41,28 +43,31 @@ swanlab --help
 
 ### 一、登录 EvalScope 实例
 
-本服务实例**默认不分配公网 IP**（公网带宽为 0），且安全组默认不放行任何入方向端口。因此有以下两种登录方式：
+实例是否具备公网能力，由部署时的**「开启公网IP」参数（默认开启）**决定。
 
-**方式一：免公网登录（推荐）**
+**方式一：公网 SSH 登录（部署时开启公网IP）**
 
-无需任何网络改动，直接在 ECS 控制台使用 Workbench 远程连接：
+部署时保持「开启公网IP」为开启，模板会自动分配公网 IP（带宽默认 5 Mbps，可调）并在安全组放行 22 端口，部署完成即可直接登录，无需手动改安全组：
+
+```bash
+ssh root@<实例公网IP>
+```
+
+> 安全建议：部署时把「允许 SSH 登录的源网段」从默认的 `0.0.0.0/0` 改为您的办公网出口 IP（如 `1.2.3.4/32`），避免 root 密码登录暴露在公网。
+
+**方式二：免公网登录（部署时关闭公网IP）**
+
+若出于安全或成本考虑在部署时关闭了公网IP，可在 ECS 控制台使用 Workbench 远程连接：
 
 1. 进入服务实例详情页，单击 ECS 实例 ID 跳转到 ECS 控制台。
 2. 在实例列表中单击「远程连接」→「通过 Workbench 远程连接」。
 3. 输入 root 与部署时设置的实例密码即可登录。
 
-该方式走阿里云内部通道，不需要公网 IP、不需要改安全组，也不产生公网流量费用，适合绝大多数场景。
+该方式走阿里云内部通道，不需要公网 IP，也不产生公网流量费用。
 
-**方式二：公网 SSH 登录**
+> ⚠️ 关闭公网IP 后，实例同样无法**主动访问外部网络**，将影响从 ModelScope 下载数据集/分词器、上报 SwanLab、压测公网模型 API。如确需关闭公网IP，请为所在 VPC 配置 NAT 网关提供出公网能力，或参照[方式二](#方式二先从-modelscope-手动下载再用---dataset-path-指定)预先准备本地数据集。
 
-若您习惯用本地终端 SSH，需要手动开通公网访问（两步都要做，缺一不可）：
-
-1. **分配公网 IP**：在 ECS 控制台为实例绑定一个弹性公网 IP（EIP），或修改实例的公网带宽为大于 0 的值。
-2. **放行 SSH 端口**：在实例所属安全组的入方向添加规则，放行 TCP `22` 端口，授权对象填写您的办公网出口 IP（**不建议填 `0.0.0.0/0`**）。
-
-完成后即可 `ssh root@<公网IP>`。
-
-> 若 SSH 出现 `Operation timed out`，几乎都是上述第 2 步安全组未放行导致的，请优先检查安全组入方向规则。
+> 若公网 SSH 出现 `Operation timed out`，请确认部署时是否开启了公网IP，以及您当前的出口 IP 是否在「允许 SSH 登录的源网段」范围内。
 
 ### 二、EvalScope 访问被压测的模型 API
 
@@ -97,7 +102,7 @@ swanlab --help
 需满足：
 
 1. **模型服务侧**：已绑定公网 IP，且安全组入方向放行模型端口（如 TCP `8000`）给 EvalScope 实例的公网出口 IP。
-2. **EvalScope 实例侧**：具备访问公网的能力——绑定 EIP，或所在 VPC 已配置 NAT 网关。**默认部署的实例没有公网出口，需要自行配置。**
+2. **EvalScope 实例侧**：需具备访问公网的能力。部署时保持「开启公网IP」为开启即可；若部署时关闭了公网IP，则需为所在 VPC 配置 NAT 网关。
 
 注意：公网压测的时延包含了公网链路开销，测得的 TTFT 会明显高于私网，不适合作为模型性能基线，仅适合验证可用性或评估端到端用户体验。
 
@@ -209,30 +214,47 @@ evalscope perf \
 
 > 默认下载源即为 ModelScope（`--data-source modelscope`），国内网络无需额外配置即可直接拉取。
 
-#### 方式二：先从 ModelScope 手动下载，再用 `--dataset-path` 指定
+#### 方式二：离线使用（未开公网IP时，先下载再上传到 ECS）
 
-适用于以下场景：需要提前把数据缓存到本地、实例出公网受限、或希望多次压测复用同一份数据。
+**适用场景**：部署时**未开启公网IP**（实例不能主动访问外部网络，无法直接从 ModelScope 拉取），或希望多次压测复用同一份数据。
 
-**第 1 步：从 ModelScope 官方下载数据集**
+> ⚠️ 实例未开公网IP 时，不能在实例上直接运行 `modelscope download`（拉不到外网）。正确做法是：**在一台有公网的机器（如您的本地电脑）下载好数据集，再上传到 ECS 实例。**
 
-实例已随 evalscope 安装了 ModelScope 命令行工具，直接使用：
+**第 1 步：在有公网的机器上从 ModelScope 下载数据集**
+
+在您本地电脑（或任意能联网的服务器）安装 modelscope 并下载：
 
 ```bash
-# 创建数据目录
-mkdir -p /opt/evalscope/datasets
+# 在有网络的机器上执行
+pip install modelscope
 
-# 从 ModelScope 官方下载数据集（以 HC3-Chinese 为例）
-/opt/evalscope/venv/bin/modelscope download \
+# 下载数据集（以 HC3-Chinese 为例）
+modelscope download \
   --dataset AI-ModelScope/HC3-Chinese \
-  --local_dir /opt/evalscope/datasets/HC3-Chinese
-
-# 查看下载得到的数据文件
-ls -lh /opt/evalscope/datasets/HC3-Chinese
+  --local_dir ./HC3-Chinese
 ```
 
-也可以在 [ModelScope 数据集页面](https://www.modelscope.cn/datasets)搜索所需数据集，复制其数据集 ID（形如 `组织名/数据集名`）后替换上面的 `--dataset` 参数。
+也可在 [ModelScope 数据集页面](https://www.modelscope.cn/datasets)搜索所需数据集，直接从网页下载数据文件（如 `.jsonl`）。
 
-**第 2 步：压测时通过 `--dataset-path` 指定本地路径**
+**第 2 步：把数据上传到 ECS 实例**
+
+先在实例上建好目录（登录方式见[前文](#一登录-evalscope-实例)）：
+
+```bash
+# 在 ECS 实例上执行
+mkdir -p /opt/evalscope/datasets
+```
+
+再选用下列任一方式上传：
+
+- **开了公网IP：**在本地用 `scp` 直接传：
+  ```bash
+  # 在本地机器上执行，<实例公网IP> 替换为实际地址
+  scp -r ./HC3-Chinese root@<实例公网IP>:/opt/evalscope/datasets/
+  ```
+- **未开公网IP：**在 ECS 控制台的 Workbench 远程连接窗口使用「上传文件」功能，把数据文件传到 `/opt/evalscope/datasets/` 目录；或将数据先上传至同 VPC 内其他可联网节点/OSS 后再内网传输。
+
+**第 3 步：压测时通过 `--dataset-path` 指向上传后的本地路径**
 
 ```bash
 evalscope perf \
@@ -248,6 +270,8 @@ evalscope perf \
 
 - `--dataset openqa` → 读取 jsonl 的 `question` 字段
 - `--dataset longalpaca` → 读取 jsonl 的 `instruction` 字段
+
+> 提示：`random` 模式需要的分词器（`--tokenizer-path`）同样需要联网下载。未开公网IP 时，请用相同方式先在有网机器执行 `modelscope download --model Qwen/Qwen3-32B --local_dir ./Qwen3-32B` 下载分词器，上传到实例后将 `--tokenizer-path` 指向该本地目录。
 
 #### 方式三：使用自己的纯文本语料（`line_by_line`）
 
@@ -306,13 +330,13 @@ SwanLab API Key 可在 [SwanLab 官网](https://swanlab.cn)登录后于个人设
 
 | 现象 | 原因与解决办法 |
 | --- | --- |
-| SSH 连接超时 `Operation timed out` | 实例默认无公网 IP 且安全组未放行。改用 ECS Workbench 远程连接，或按[登录方式二](#一登录-evalscope-实例)绑定 EIP 并放行 22 端口。 |
+| SSH 连接超时 `Operation timed out` | 部署时未开启公网IP，或您的出口 IP 不在「允许 SSH 登录的源网段」范围内。可在安全组追加放行，或改用 ECS Workbench 远程连接（参见[登录方式](#一登录-evalscope-实例)）。 |
 | `curl` 模型地址超时不返回 | 模型侧安全组未放行端口，或模型未监听 `0.0.0.0`，或两者不在同一 VPC。参见[私网访问注意事项](#私网访问推荐)。 |
 | 返回 `{"error":"Unauthorized"}` / 401 | 模型服务开启了鉴权，压测命令需补上正确的 `--api-key`。 |
 | 报错 model not found | `--model` 与模型服务实际的模型 id 不一致。先用 `curl /v1/models` 查到 `id` 字段再填写。 |
 | `ModuleNotFoundError: No module named 'uvicorn'` | 压测依赖缺失（仅早期版本实例可能出现）。执行 `/opt/evalscope/venv/bin/pip install uvicorn fastapi sse_starlette` 修复。 |
 | `--dataset random` 报错缺少 tokenizer | `random` 模式必须指定 `--tokenizer-path`。 |
-| 数据集下载缓慢或失败 | 实例需具备公网出口（EIP 或 NAT 网关）才能访问 ModelScope。也可参照[方式二](#方式二先从-modelscope-手动下载再用---dataset-path-指定)在有网络的环境下载后上传到实例。 |
+| 数据集下载缓慢或失败 | 实例需具备公网出口才能访问 ModelScope。请确认部署时已开启公网IP（或已配置 NAT 网关）；也可参照[方式二](#方式二先从-modelscope-手动下载再用---dataset-path-指定)在有网络的环境下载后上传到实例。 |
 | 各请求输出长度不一致、吞吐数据波动大 | 压测命令未加 `--extra-args '{"ignore_eos": true}'`，模型提前结束生成所致。 |
 
 更多用法与参数详见官方文档：[EvalScope 压测参数说明](https://evalscope.readthedocs.io/zh-cn/latest/user_guides/stress_test/parameters.html)
