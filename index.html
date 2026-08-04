@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="计算巢是阿里云开放给企业应用服务商的服务管理平台。服务商能够在计算巢上发布私有化部署服务，为其客户提供云上软件一键部署的能力；同时也支持全托管模式的服务，赋能服务商托管其客户资源。">
+  <title>EvalScope 社区版服务实例部署文档 - Aliyun 计算巢 x EvalScope</title>
+
+  <link rel="shortcut icon" href="img/favicon.ico">
+
+  <link rel="stylesheet" href="https://unpkg.com/purecss@1.0.0/build/pure-min.css">
+  <link rel="stylesheet" href="css/theme.css">
+  
+
+  
+
+  
+  
+
+  
+    <script src="search/main.js"></script>
+  
+
+  
+
+  <script src="js/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body>
+  <div class="container">
+    <div class="nav">
+      <div class="nav-inner">
+        <div class="logo">
+          <img src="./img/logo-2x.png">
+        </div>
+        <div class="nav-list">
+          <ul>
+          
+              <li><a href="#evalscope">EvalScope 社区版服务实例部署文档</a></li>
+              
+                  <li><a href="#_1">概述</a></li>
+                  
+              
+                  <li><a href="#_2">部署流程</a></li>
+                  
+                      <li class="li-h3"><a href="#_3">部署步骤</a></li>
+                  
+                      <li class="li-h3"><a href="#_4">验证结果</a></li>
+                  
+              
+                  <li><a href="#_5">访问方式：公网与私网</a></li>
+                  
+                      <li class="li-h3"><a href="#evalscope_1">一、登录 EvalScope 实例</a></li>
+                  
+                      <li class="li-h3"><a href="#evalscope-api">二、EvalScope 访问被压测的模型 API</a></li>
+                  
+              
+                  <li><a href="#_9">压测使用：随机压测与自定义数据集</a></li>
+                  
+                      <li class="li-h3"><a href="#_10">通用必填参数</a></li>
+                  
+                      <li class="li-h3"><a href="#-dataset-random">一、随机压测（--dataset random）</a></li>
+                  
+                      <li class="li-h3"><a href="#modelscope">二、自定义数据集（使用 ModelScope 官方数据集）</a></li>
+                  
+                      <li class="li-h3"><a href="#swanlab">三、结果查看与 SwanLab 上报</a></li>
+                  
+              
+                  <li><a href="#_12">问题排查</a></li>
+                  
+              
+                  <li><a href="#_13">联系我们</a></li>
+                  
+              
+          
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="content theme-github">
+      
+      <div class="content-inner">        
+        
+        <h1 id="evalscope">EvalScope 社区版服务实例部署文档</h1>
+<h2 id="_1">概述</h2>
+<p>EvalScope 是 ModelScope 开源的大语言模型评测与压测框架，内置压力测试模块（<code>evalscope perf</code>），可对任意 OpenAI 兼容的模型 API 进行高并发压测，输出 TTFT、TPOT、吞吐、RPS 等关键指标，并支持将结果上报 SwanLab 进行可视化实验跟踪。</p>
+<p>本服务在一台 ECS 上预装了 <code>evalscope</code> 与 <code>swanlab</code>（含压测所需的全部依赖），开箱即可对您自己部署的模型服务发起压测。本文介绍如何开通并部署该服务，以及部署后的访问方式与压测用法。</p>
+<ul>
+<li>开源地址：<a href="https://github.com/modelscope/evalscope">https://github.com/modelscope/evalscope</a></li>
+<li>官方文档：<a href="https://evalscope.readthedocs.io/zh-cn/latest/">https://evalscope.readthedocs.io/zh-cn/latest/</a></li>
+</ul>
+<h2 id="_2">部署流程</h2>
+<h3 id="_3">部署步骤</h3>
+<ol>
+<li>单击部署链接，进入服务实例部署界面：<a href="https://computenest.console.aliyun.com/service/instance/create?type=user&amp;ServiceId=service-13c1c7d4aab245b5aa46">部署链接</a></li>
+<li>按界面提示填写参数，其中两项需重点确认：</li>
+<li><strong>开启公网IP</strong>（默认开启）：开启后可从 ModelScope 下载数据集/分词器、上报 SwanLab、压测公网模型 API，并可公网 SSH 登录。若您的模型在同一 VPC 内、且无需联网下载数据集，可关闭。</li>
+<li><strong>可用区配置</strong>：如需私网压测，务必选择模型服务所在的已有 VPC 与交换机。</li>
+<li>单击「下一步：确认订单」，确认预估费用与参数后单击「立即创建」。</li>
+<li>等待部署完成（约 3-5 分钟），实例状态变为「已部署」。</li>
+</ol>
+<h3 id="_4">验证结果</h3>
+<p>部署完成后，在服务实例详情页可看到 ECS 实例信息。登录实例（登录方式见下节）后执行以下命令验证环境就绪：</p>
+<pre><code class="language-bash"># 验证 evalscope 与压测依赖
+evalscope --version
+evalscope perf --help
+
+# 验证 swanlab
+swanlab --help
+</code></pre>
+<p><code>evalscope perf --help</code> 能正常输出帮助信息，即表示压测模块及其依赖已完整安装。</p>
+<hr />
+<h2 id="_5">访问方式：公网与私网</h2>
+<p>这是使用本服务最需要先想清楚的一件事，包含两个层面：<strong>① 您如何登录 EvalScope 实例；② EvalScope 实例如何访问被压测的模型 API。</strong></p>
+<h3 id="evalscope_1">一、登录 EvalScope 实例</h3>
+<p>实例是否具备公网能力，由部署时的<strong>「开启公网IP」参数（默认开启）</strong>决定。</p>
+<p><strong>方式一：公网 SSH 登录（部署时开启公网IP）</strong></p>
+<p>部署时保持「开启公网IP」为开启，模板会自动分配公网 IP 并在安全组放行 22 端口，部署完成即可直接用部署时设置的实例密码登录，无需手动改安全组：</p>
+<pre><code class="language-bash">ssh root@&lt;实例公网IP&gt;
+</code></pre>
+<blockquote>
+<p>安全建议：模板默认向 <code>0.0.0.0/0</code> 放行 22 端口。如需收紧，可在部署完成后于 ECS 控制台把安全组 22 端口规则的授权对象改为您的办公网出口 IP（如 <code>1.2.3.4/32</code>）。</p>
+</blockquote>
+<p><strong>方式二：免公网登录（部署时关闭公网IP）</strong></p>
+<p>若出于安全或成本考虑在部署时关闭了公网IP，可在 ECS 控制台使用 Workbench 远程连接：</p>
+<ol>
+<li>进入服务实例详情页，单击 ECS 实例 ID 跳转到 ECS 控制台。</li>
+<li>在实例列表中单击「远程连接」→「通过 Workbench 远程连接」。</li>
+<li>输入 root 与部署时设置的实例密码即可登录。</li>
+</ol>
+<p>该方式走阿里云内部通道，不需要公网 IP，也不产生公网流量费用。</p>
+<blockquote>
+<p>⚠️ 关闭公网IP 后，实例同样无法<strong>主动访问外部网络</strong>，将影响从 ModelScope 下载数据集/分词器、上报 SwanLab、压测公网模型 API。如确需关闭公网IP，请为所在 VPC 配置 NAT 网关提供出公网能力，或参照<a href="#方式二先从-modelscope-手动下载再用---dataset-path-指定">方式二</a>预先准备本地数据集。</p>
+<p>若公网 SSH 出现 <code>Operation timed out</code>，请确认部署时是否开启了公网IP，以及安全组 22 端口规则是否被后续修改过。</p>
+</blockquote>
+<h3 id="evalscope-api">二、EvalScope 访问被压测的模型 API</h3>
+<p>压测命令中 <code>--url</code> 填写的地址，决定了走公网还是私网。<strong>强烈建议走私网。</strong></p>
+<h4 id="_6">私网访问（推荐）</h4>
+<p><strong>适用前提</strong>：EvalScope 实例与模型服务在<strong>同一 VPC</strong>内。</p>
+<pre><code class="language-bash"># --url 使用模型服务的私网 IP
+--url http://192.168.1.100:8000/v1/chat/completions
+</code></pre>
+<p>优势：延迟低、带宽大、不产生公网流量费用，压测得到的 TTFT/TPOT 更接近模型服务的真实性能（不被公网抖动干扰）。</p>
+<p><strong>⚠️ 关键注意事项：同一 VPC 内的两台 ECS 默认并不能互相访问。</strong> 私网连通还需要满足：</p>
+<ol>
+<li><strong>模型服务侧安全组放行</strong>：在<strong>模型服务所在实例</strong>的安全组入方向，添加规则放行模型端口（如 TCP <code>8000</code>），授权对象填写 EvalScope 实例的私网 IP（如 <code>192.168.1.175/32</code>）或其所在交换机网段（如 <code>192.168.1.0/24</code>）。</li>
+<li><strong>模型服务监听地址正确</strong>：模型服务需监听 <code>0.0.0.0</code>（而非 <code>127.0.0.1</code>），否则只能本机访问。以 vLLM 为例需带 <code>--host 0.0.0.0</code>。</li>
+<li><strong>网段可达</strong>：若两台实例在同一 VPC 的不同交换机（不同子网），VPC 内路由默认互通，仅需完成第 1 步；若在<strong>不同 VPC</strong>，则私网不通，需先打通（VPC 对等连接/云企业网），否则请改用公网方式。</li>
+</ol>
+<h4 id="_7">公网访问</h4>
+<p><strong>适用场景</strong>：模型服务不在同一 VPC（例如在别的账号、别的地域，或使用第三方 API）。</p>
+<pre><code class="language-bash"># --url 使用模型服务的公网 IP 或域名
+--url http://&lt;公网IP&gt;:8000/v1/chat/completions
+</code></pre>
+<p>需满足：</p>
+<ol>
+<li><strong>模型服务侧</strong>：已绑定公网 IP，且安全组入方向放行模型端口（如 TCP <code>8000</code>）给 EvalScope 实例的公网出口 IP。</li>
+<li><strong>EvalScope 实例侧</strong>：需具备访问公网的能力。部署时保持「开启公网IP」为开启即可；若部署时关闭了公网IP，则需为所在 VPC 配置 NAT 网关。</li>
+</ol>
+<p>注意：公网压测的时延包含了公网链路开销，测得的 TTFT 会明显高于私网，不适合作为模型性能基线，仅适合验证可用性或评估端到端用户体验。</p>
+<h4 id="_8">压测前的连通性自检</h4>
+<p>正式压测前，务必先用一条 <code>curl</code> 确认网络与鉴权都通，可以避免大量无效排查：</p>
+<pre><code class="language-bash"># 替换为您的地址与 API Key；若模型未开启鉴权可去掉 -H 参数
+curl -s -m 10 http://&lt;模型地址&gt;:8000/v1/models \
+  -H &quot;Authorization: Bearer &lt;YOUR_API_KEY&gt;&quot;
+</code></pre>
+<ul>
+<li>正常返回模型列表 JSON → 网络与鉴权均正常，<strong>请记下返回中的 <code>id</code> 字段</strong>，它就是压测时 <code>--model</code> 必须填写的模型名。</li>
+<li>返回 <code>{"error":"Unauthorized"}</code> 或 401 → 网络通，但鉴权失败，需在压测命令中带上正确的 <code>--api-key</code>。</li>
+<li>长时间无响应 / 超时 → 网络不通，请按上文检查安全组与监听地址。</li>
+</ul>
+<hr />
+<h2 id="_9">压测使用：随机压测与自定义数据集</h2>
+<p>登录实例后即可执行 <code>evalscope perf</code>。以下两类用法覆盖绝大多数压测需求。</p>
+<h3 id="_10">通用必填参数</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--model</code></td>
+<td>模型名，<strong>必须与 <code>/v1/models</code> 返回的 <code>id</code> 完全一致</strong>（例如是 <code>Qwen/Qwen3-32B</code> 而不是 <code>Qwen3-32B</code>，写错会报 model not found）。</td>
+</tr>
+<tr>
+<td><code>--url</code></td>
+<td>模型 API 地址，需带完整路径，如 <code>http://&lt;IP&gt;:8000/v1/chat/completions</code>。</td>
+</tr>
+<tr>
+<td><code>--api</code></td>
+<td>接口协议，OpenAI 兼容接口填 <code>openai</code>。</td>
+</tr>
+<tr>
+<td><code>--api-key</code></td>
+<td>模型服务的 API Key。<strong>若模型开启了鉴权，此参数必填</strong>，否则全部请求返回 401。</td>
+</tr>
+<tr>
+<td><code>--parallel</code></td>
+<td>并发数，可传多个值做并发梯度测试。</td>
+</tr>
+<tr>
+<td><code>--number</code></td>
+<td>总请求数，需与 <code>--parallel</code> 数量对应。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="-dataset-random">一、随机压测（<code>--dataset random</code>）</h3>
+<p>随机压测由 EvalScope 现场生成指定长度的 prompt，<strong>输入/输出长度完全可控</strong>，是衡量模型服务性能基线、做规格或参数对比的首选方式。</p>
+<pre><code class="language-bash">evalscope perf \
+  --model Qwen/Qwen3-32B \
+  --url http://192.168.1.100:8000/v1/chat/completions \
+  --api openai \
+  --api-key sk-xxxxxxxx \
+  --parallel 3 \
+  --number 30 \
+  --dataset random \
+  --tokenizer-path Qwen/Qwen3-32B \
+  --prefix-length 0 \
+  --min-prompt-length 1024 \
+  --max-prompt-length 1024 \
+  --min-tokens 1024 \
+  --max-tokens 1024 \
+  --extra-args '{&quot;ignore_eos&quot;: true}'
+</code></pre>
+<p>关键参数说明：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--tokenizer-path</code></td>
+<td><strong><code>random</code> 模式必填</strong>。用于生成并计数 token，填模型的 ModelScope ID（如 <code>Qwen/Qwen3-32B</code>，会自动下载分词器）或本地分词器目录。</td>
+</tr>
+<tr>
+<td><code>--min-prompt-length</code> / <code>--max-prompt-length</code></td>
+<td>输入长度范围。<strong>两者设为相同值即可得到定长输入</strong>（这是 <code>random</code> 独有的能力）。</td>
+</tr>
+<tr>
+<td><code>--min-tokens</code> / <code>--max-tokens</code></td>
+<td>输出长度范围，设为相同值可固定输出长度。</td>
+</tr>
+<tr>
+<td><code>--prefix-length</code></td>
+<td>公共前缀长度，设为 <code>0</code> 表示无公共前缀（可避免 prefix cache 干扰）；设为大于 0 可专门测试前缀缓存命中效果。</td>
+</tr>
+<tr>
+<td><code>--extra-args '{"ignore_eos": true}'</code></td>
+<td>让模型忽略结束符、必须生成到 <code>max-tokens</code>，从而保证每条输出长度严格一致，结果更可比。</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>提示：定长输入输出 + <code>ignore_eos</code> 是做性能基线的标准做法。若不加 <code>ignore_eos</code>，模型可能提前结束生成，导致各请求输出长度不一，吞吐数据失去可比性。</p>
+</blockquote>
+<p><strong>并发梯度测试</strong>（找服务的吞吐拐点与最大承载）：</p>
+<pre><code class="language-bash">evalscope perf \
+  --model Qwen/Qwen3-32B \
+  --url http://192.168.1.100:8000/v1/chat/completions \
+  --api openai --api-key sk-xxxxxxxx \
+  --dataset random --tokenizer-path Qwen/Qwen3-32B \
+  --min-prompt-length 1024 --max-prompt-length 1024 \
+  --min-tokens 512 --max-tokens 512 \
+  --extra-args '{&quot;ignore_eos&quot;: true}' \
+  --parallel 1 4 8 16 \
+  --number 20 40 80 160
+</code></pre>
+<h3 id="modelscope">二、自定义数据集（使用 ModelScope 官方数据集）</h3>
+<p>随机数据是无语义的合成文本。若要贴近真实业务负载，应使用真实语料。EvalScope 的真实数据集<strong>统一从 ModelScope 官方下载</strong>，有「自动下载」和「先手动下载再指定路径」两种用法。</p>
+<h4 id="modelscope_1">方式一：自动从 ModelScope 下载（最简单）</h4>
+<p>指定 <code>--dataset</code> 为内置数据集名，EvalScope 会自动从 ModelScope 拉取，无需手动准备：</p>
+<pre><code class="language-bash">evalscope perf \
+  --model Qwen/Qwen3-32B \
+  --url http://192.168.1.100:8000/v1/chat/completions \
+  --api openai --api-key sk-xxxxxxxx \
+  --parallel 4 --number 40 \
+  --dataset openqa
+</code></pre>
+<p>常用内置真实数据集（均托管在 ModelScope 官方）：</p>
+<table>
+<thead>
+<tr>
+<th><code>--dataset</code> 取值</th>
+<th>数据集来源</th>
+<th>特点与适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>openqa</code></td>
+<td><a href="https://www.modelscope.cn/datasets/AI-ModelScope/HC3-Chinese/summary">AI-ModelScope/HC3-Chinese</a></td>
+<td>中文问答，prompt 较短（一般 &lt; 100 token），适合短输入高并发场景</td>
+</tr>
+<tr>
+<td><code>longalpaca</code></td>
+<td><a href="https://www.modelscope.cn/datasets/AI-ModelScope/LongAlpaca-12k">AI-ModelScope/LongAlpaca-12k</a></td>
+<td>长文本，prompt 较长（一般 &gt; 6000 token），适合长上下文压测</td>
+</tr>
+<tr>
+<td><code>share_gpt_zh</code> / <code>share_gpt_en</code></td>
+<td><a href="https://www.modelscope.cn/datasets/swift/sharegpt">swift/sharegpt</a></td>
+<td>真实对话语料（约 70k 条），中英文可选，最贴近聊天类业务</td>
+</tr>
+<tr>
+<td><code>flickr8k</code> / <code>kontext_bench</code></td>
+<td>ModelScope 官方多模态数据集</td>
+<td>构建图文输入，用于压测多模态模型</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>默认下载源即为 ModelScope（<code>--data-source modelscope</code>），国内网络无需额外配置即可直接拉取。</p>
+</blockquote>
+<h4 id="ip-ecs">方式二：离线使用（未开公网IP时，先下载再上传到 ECS）</h4>
+<p><strong>适用场景</strong>：部署时<strong>未开启公网IP</strong>（实例不能主动访问外部网络，无法直接从 ModelScope 拉取），或希望多次压测复用同一份数据。</p>
+<blockquote>
+<p>⚠️ 实例未开公网IP 时，不能在实例上直接运行 <code>modelscope download</code>（拉不到外网）。正确做法是：<strong>在一台有公网的机器（如您的本地电脑）下载好数据集，再上传到 ECS 实例。</strong></p>
+</blockquote>
+<p><strong>第 1 步：在有公网的机器上从 ModelScope 下载数据集</strong></p>
+<p>在您本地电脑（或任意能联网的服务器）安装 modelscope 并下载：</p>
+<pre><code class="language-bash"># 在有网络的机器上执行
+pip install modelscope
+
+# 下载数据集（以 HC3-Chinese 为例）
+modelscope download \
+  --dataset AI-ModelScope/HC3-Chinese \
+  --local_dir ./HC3-Chinese
+</code></pre>
+<p>也可在 <a href="https://www.modelscope.cn/datasets">ModelScope 数据集页面</a>搜索所需数据集，直接从网页下载数据文件（如 <code>.jsonl</code>）。</p>
+<p><strong>第 2 步：把数据上传到 ECS 实例</strong></p>
+<p>先在实例上建好目录（登录方式见<a href="#一登录-evalscope-实例">前文</a>）：</p>
+<pre><code class="language-bash"># 在 ECS 实例上执行
+mkdir -p /opt/evalscope/datasets
+</code></pre>
+<p>再选用下列任一方式上传：</p>
+<ul>
+<li><strong>开了公网IP：</strong>在本地用 <code>scp</code> 直接传：
+  <code>bash
+  # 在本地机器上执行，&lt;实例公网IP&gt; 替换为实际地址
+  scp -r ./HC3-Chinese root@&lt;实例公网IP&gt;:/opt/evalscope/datasets/</code></li>
+<li><strong>未开公网IP：</strong>在 ECS 控制台的 Workbench 远程连接窗口使用「上传文件」功能，把数据文件传到 <code>/opt/evalscope/datasets/</code> 目录；或将数据先上传至同 VPC 内其他可联网节点/OSS 后再内网传输。</li>
+</ul>
+<p><strong>第 3 步：压测时通过 <code>--dataset-path</code> 指向上传后的本地路径</strong></p>
+<pre><code class="language-bash">evalscope perf \
+  --model Qwen/Qwen3-32B \
+  --url http://192.168.1.100:8000/v1/chat/completions \
+  --api openai --api-key sk-xxxxxxxx \
+  --parallel 4 --number 40 \
+  --dataset openqa \
+  --dataset-path /opt/evalscope/datasets/HC3-Chinese/open_qa.jsonl
+</code></pre>
+<p>注意：<code>--dataset</code> 仍需指定为对应的解析模式，它决定了 EvalScope 从文件中读取哪个字段：</p>
+<ul>
+<li><code>--dataset openqa</code> → 读取 jsonl 的 <code>question</code> 字段</li>
+<li><code>--dataset longalpaca</code> → 读取 jsonl 的 <code>instruction</code> 字段</li>
+</ul>
+<blockquote>
+<p>提示：<code>random</code> 模式需要的分词器（<code>--tokenizer-path</code>）同样需要联网下载。未开公网IP 时，请用相同方式先在有网机器执行 <code>modelscope download --model Qwen/Qwen3-32B --local_dir ./Qwen3-32B</code> 下载分词器，上传到实例后将 <code>--tokenizer-path</code> 指向该本地目录。</p>
+</blockquote>
+<h4 id="line_by_line">方式三：使用自己的纯文本语料（<code>line_by_line</code>）</h4>
+<p>若您有自己的业务 prompt，整理成一行一条的 txt 文件即可直接压测：</p>
+<pre><code class="language-bash">evalscope perf \
+  --model Qwen/Qwen3-32B \
+  --url http://192.168.1.100:8000/v1/chat/completions \
+  --api openai --api-key sk-xxxxxxxx \
+  --parallel 4 --number 40 \
+  --dataset line_by_line \
+  --dataset-path /opt/evalscope/datasets/my_prompts.txt
+</code></pre>
+<h4 id="_11">用真实数据做定长对照压测</h4>
+<p>真实语料长度参差不齐，若想在真实语料上做<strong>固定输入长度</strong>的对照压测，用 <code>--dataset-args</code> 的 <code>target_input_len</code>（需配合 <code>--tokenizer-path</code>）：</p>
+<pre><code class="language-bash">evalscope perf \
+  --model Qwen/Qwen3-32B \
+  --url http://192.168.1.100:8000/v1/chat/completions \
+  --api openai --api-key sk-xxxxxxxx \
+  --parallel 4 --number 40 \
+  --dataset share_gpt_zh \
+  --tokenizer-path Qwen/Qwen3-32B \
+  --dataset-args '{&quot;target_input_len&quot;: 2048}'
+</code></pre>
+<blockquote>
+<p><code>--min/max-prompt-length</code> 只做<strong>筛选</strong>（不满足长度的样本被丢弃，结果仍长短不一）；<code>target_input_len</code> 会把每条 prompt <strong>截断改写</strong>到指定长度。真实数据集想要"每条恰好 N token"只能用后者。</p>
+</blockquote>
+<h3 id="swanlab">三、结果查看与 SwanLab 上报</h3>
+<p>压测结束后，终端会打印汇总报告（成功率、RPS、TTFT、TPOT、吞吐等），同时在 <code>outputs/&lt;时间戳&gt;/&lt;模型名&gt;/</code> 目录下生成：</p>
+<ul>
+<li><code>perf_report.html</code>：可视化 HTML 报告</li>
+<li><code>performance_summary.txt</code>：文本摘要</li>
+<li><code>benchmark_data.db</code>：每条请求的明细数据（sqlite3，可自行分析）</li>
+</ul>
+<p>若需将压测结果上报到 SwanLab 进行多次实验对比，追加两个参数即可：</p>
+<pre><code class="language-bash">evalscope perf \
+  ... \
+  --visualizer swanlab \
+  --swanlab-api-key &lt;您的SwanLab API Key&gt; \
+  --name evalscope-qwen3-32b-test
+</code></pre>
+<p>SwanLab API Key 可在 <a href="https://swanlab.cn">SwanLab 官网</a>登录后于个人设置中获取。上报成功后命令行会输出实验链接，打开即可查看图表。</p>
+<hr />
+<h2 id="_12">问题排查</h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>原因与解决办法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SSH 连接超时 <code>Operation timed out</code></td>
+<td>部署时未开启公网IP，或安全组 22 端口规则被修改/移除。可在安全组追加放行 22 端口，或改用 ECS Workbench 远程连接（参见<a href="#一登录-evalscope-实例">登录方式</a>）。</td>
+</tr>
+<tr>
+<td><code>curl</code> 模型地址超时不返回</td>
+<td>模型侧安全组未放行端口，或模型未监听 <code>0.0.0.0</code>，或两者不在同一 VPC。参见<a href="#私网访问推荐">私网访问注意事项</a>。</td>
+</tr>
+<tr>
+<td>返回 <code>{"error":"Unauthorized"}</code> / 401</td>
+<td>模型服务开启了鉴权，压测命令需补上正确的 <code>--api-key</code>。</td>
+</tr>
+<tr>
+<td>报错 model not found</td>
+<td><code>--model</code> 与模型服务实际的模型 id 不一致。先用 <code>curl /v1/models</code> 查到 <code>id</code> 字段再填写。</td>
+</tr>
+<tr>
+<td><code>ModuleNotFoundError: No module named 'uvicorn'</code></td>
+<td>压测依赖缺失（仅早期版本实例可能出现）。执行 <code>/opt/evalscope/venv/bin/pip install uvicorn fastapi sse_starlette</code> 修复。</td>
+</tr>
+<tr>
+<td><code>--dataset random</code> 报错缺少 tokenizer</td>
+<td><code>random</code> 模式必须指定 <code>--tokenizer-path</code>。</td>
+</tr>
+<tr>
+<td>数据集下载缓慢或失败</td>
+<td>实例需具备公网出口才能访问 ModelScope。请确认部署时已开启公网IP（或已配置 NAT 网关）；也可参照<a href="#方式二先从-modelscope-手动下载再用---dataset-path-指定">方式二</a>在有网络的环境下载后上传到实例。</td>
+</tr>
+<tr>
+<td>各请求输出长度不一致、吞吐数据波动大</td>
+<td>压测命令未加 <code>--extra-args '{"ignore_eos": true}'</code>，模型提前结束生成所致。</td>
+</tr>
+</tbody>
+</table>
+<p>更多用法与参数详见官方文档：<a href="https://evalscope.readthedocs.io/zh-cn/latest/user_guides/stress_test/parameters.html">EvalScope 压测参数说明</a></p>
+<h2 id="_13">联系我们</h2>
+<ul>
+<li>EvalScope 官方文档：<a href="https://evalscope.readthedocs.io/zh-cn/latest/">https://evalscope.readthedocs.io/zh-cn/latest/</a></li>
+<li>社区版开源地址：<a href="https://github.com/modelscope/evalscope">https://github.com/modelscope/evalscope</a></li>
+<li>ModelScope 数据集广场：<a href="https://www.modelscope.cn/datasets">https://www.modelscope.cn/datasets</a></li>
+<li>SwanLab 官网：<a href="https://swanlab.cn">https://swanlab.cn</a></li>
+</ul>
+        
+      </div>
+
+      <div class="copyrights">© 2009-2022 Aliyun.com 版权所有</div>
+    </div>
+  </div>
+  
+  <!--
+  MkDocs version      : 1.6.1
+  Docs Build Date UTC : 2026-08-04 06:50:42.287590+00:00
+  -->
+</body>
+</html>
